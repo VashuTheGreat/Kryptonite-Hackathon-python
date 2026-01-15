@@ -1,0 +1,32 @@
+# Environment variables
+*.env
+.env
+
+# Project directories
+public/
+outputs/
+ignis/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Data files
+*.jpg
+*.jpeg
+*.png
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+
+# Test files
+test.py
