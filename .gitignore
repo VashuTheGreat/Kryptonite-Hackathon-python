@@ -27,6 +27,6 @@ build/
 
 # OS
 .DS_Store
-
+*.html
 # Test files
 test.py

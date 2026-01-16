@@ -52,7 +52,8 @@ async def map_locations(
 
     # cleanup temp files
     if map_file and os.path.exists(map_file):
-        os.remove(map_file)
+        # os.remove(map_file)
+        pass
     if temp_file and os.path.exists(temp_file):
         os.remove(temp_file)
 
