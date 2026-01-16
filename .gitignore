@@ -28,5 +28,6 @@ build/
 # OS
 .DS_Store
 *.html
+firms_map.html
 # Test files
 test.py

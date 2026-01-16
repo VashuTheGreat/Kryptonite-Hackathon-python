@@ -4,13 +4,13 @@ import uvicorn as uv
 import os
 import shutil
 import base64
-
+import json
 from fastapi.middleware.cors import CORSMiddleware
 
 from settlelite_image_fire_coordinate import (
     fetch_firms_data,
     generate_map,
-    draw_boxes,   # ✅ IMPORTED, NOT REDEFINED
+    draw_boxes,  
 )
 
 app = FastAPI(description="Fire Detector")
@@ -52,13 +52,42 @@ async def map_locations(
 
     # cleanup temp files
     if map_file and os.path.exists(map_file):
-        # os.remove(map_file)
-        pass
+        os.remove(map_file)
+        
     if temp_file and os.path.exists(temp_file):
         os.remove(temp_file)
+        
 
     return {"html": html}
 
+
+
+
+@app.post("/get_hight_regions_area")
+async def high_regions(
+    country: str = "india",
+    state: str = "up",
+    source: str = "VIIRS_SNPP_NRT",
+    day_range: int = 3
+):
+    """Get high ragion points"""
+    data, temp_file = await fetch_firms_data(
+        country=country,
+        state=state,
+        source=source,
+        day_range=day_range
+    )
+
+    
+    data=data[data['confidence']=='h']
+    if 'geometry' in data.columns:
+        data=data.drop(columns=['geometry'])
+
+    data=json.dumps(data.to_dict())    
+    if temp_file and os.path.exists(temp_file):
+        os.remove(temp_file)
+
+    return {"data": data}
 
 @app.post("/draw_boxes_fire")
 async def draw_yolo_boxes(file: UploadFile):
@@ -86,7 +115,6 @@ async def draw_yolo_boxes(file: UploadFile):
 
     encoded_image = base64.b64encode(image_bytes).decode("utf-8")
     return {"data": encoded_image}
-
 
 if __name__ == "__main__":
     uv.run("index:app", host="127.0.0.1", port=8000, reload=True)
