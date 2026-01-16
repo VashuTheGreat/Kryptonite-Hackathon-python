@@ -4,21 +4,22 @@ import requests
 from dotenv import load_dotenv
 import geopandas
 import folium
-import json
-import os
 from ultralytics import YOLO
-import vconsoleprint
-model=YOLO("models/fire_detector.pt")
+from pathlib import Path
 
+# load env
 load_dotenv()
-MAP_KEY = os.getenv('MAP_KEY') 
+MAP_KEY = os.getenv("MAP_KEY")
 
 if not MAP_KEY:
-    raise ValueError("MAP_KEY not found in .env file. Get one from https://firms.modaps.eosdis.nasa.gov/api/")
+    raise ValueError(
+        "MAP_KEY not found in .env file. Get one from https://firms.modaps.eosdis.nasa.gov/api/"
+    )
 
+# load model ONCE
+model = YOLO("models/fire_detector.pt")
 
-base_url = "https://firms.modaps.eosdis.nasa.gov"  
-
+base_url = "https://firms.modaps.eosdis.nasa.gov"
 
 REGION_BBOX = {
     "india": {
@@ -28,91 +29,88 @@ REGION_BBOX = {
     },
 }
 
-# ------------- fetches data from NASA FIRMS -------------------
-async def fetch_firms_data(country: str, state: str, source="VIIRS_SNPP_NRT", day_range=3):
+
+# ---------------- FIRMS DATA ----------------
+async def fetch_firms_data(country, state, source="VIIRS_SNPP_NRT", day_range=3):
     country = country.lower()
     state = state.lower()
 
     if country not in REGION_BBOX or state not in REGION_BBOX[country]:
-        raise ValueError(f"Bounding box not found for {country} and {state}")
+        raise ValueError(f"Bounding box not found for {country} - {state}")
 
     area = REGION_BBOX[country][state]
     url = f"{base_url}/api/area/csv/{MAP_KEY}/{source}/{area}/{day_range}"
 
-    print(f"Fetching FIRMS data from: {url}")
-
-    response =  requests.get(url)
+    response = requests.get(url)
     if response.status_code != 200:
-        raise ConnectionError(f"Error fetching data: {response.status_code} - {response.text}")
+        raise ConnectionError(response.text)
 
-    temp_file = "firms_temp.txt"
+    temp_file = "firms_temp.csv"
     with open(temp_file, "wb") as f:
         f.write(response.content)
 
-    try:
-        df = pd.read_csv(temp_file, sep=",")
-    except:
-        df = pd.read_csv(temp_file, sep="\t")
+    df = pd.read_csv(temp_file)
 
-    filter_cols = ["latitude", "longitude", "acq_date", "acq_time", "confidence"]
-    df = df[filter_cols]
+    df = df[
+        ["latitude", "longitude", "acq_date", "acq_time", "confidence"]
+    ]
 
     df = geopandas.GeoDataFrame(
-    df, geometry=geopandas.points_from_xy(df.longitude, df.latitude), crs="EPSG:4326"
+        df,
+        geometry=geopandas.points_from_xy(df.longitude, df.latitude),
+        crs="EPSG:4326",
     )
 
-    return df,"firms_temp.txt"
+    return df, temp_file
 
 
+# ---------------- MAP GENERATION ----------------
+async def generate_map(data: pd.DataFrame):
+    center_lat = data["latitude"].mean()
+    center_lon = data["longitude"].mean()
 
-# ---------------- generates a map -----------------------
-async def generate_map(data:pd.DataFrame):
-    center_lat = data['latitude'].mean()
-    center_lon = data['longitude'].mean()
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=6,
+        tiles="OpenStreetMap",
+    )
 
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=6, tiles="OpenStreetMap")
+    colors = {"h": "red", "n": "orange", "l": "yellow"}
 
-    colors = {'h':'red', 'n':'orange', 'l':'yellow'}
-
-    for idx, row in data.iterrows():
+    for _, row in data.iterrows():
         folium.CircleMarker(
-            location=[row['latitude'], row['longitude']],
+            location=[row["latitude"], row["longitude"]],
             radius=4,
-            color=colors[row['confidence']],
+            color=colors.get(row["confidence"], "yellow"),
             fill=True,
             fill_opacity=0.7,
-            popup=f"Date: {row['acq_date']}, Time: {row['acq_time']}"
+            popup=f"{row['acq_date']} {row['acq_time']}",
         ).add_to(m)
-    try:
-        m.save("firms_map.html")
-        html_=None,None
-        with open("firms_map.html","r",encoding="utf-8") as f:
-            html_=f.read()
-        
-        return html_,"firms_map.html"
-    except Exception as e:
-        return None
+
+    file_name = "firms_map.html"
+    m.save(file_name)
+
+    with open(file_name, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    return html, file_name
 
 
-# ------------------ Draw detected Fire labels ------------
+# ---------------- YOLO FIRE DETECTION ----------------
 async def draw_boxes(image_path, save_dir="outputs"):
     results = model(
         image_path,
         conf=0.25,
         save=True,
         project=save_dir,
-        name="fires"
+        name="fires",
     )
 
     r = results[0]
+    save_path = Path(r.save_dir)
 
-    print("Saved directory:", r.save_dir)
+    images = list(save_path.glob("*.jpg")) + list(save_path.glob("*.png"))
+    if not images:
+        raise FileNotFoundError("YOLO output image not found")
 
-    return str(r.save_dir)
-
-
-
-
-
-
-
+    return str(images[0])
