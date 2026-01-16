@@ -69,13 +69,10 @@ async def generate_map(data: pd.DataFrame):
     center_lat = data["latitude"].mean()
     center_lon = data["longitude"].mean()
 
-    m = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=6,
-        tiles="OpenStreetMap",
-    )
+    
 
     colors = {"h": "red", "n": "orange", "l": "yellow"}
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=6, tiles="Esri.WorldImagery")
 
     for _, row in data.iterrows():
         folium.CircleMarker(
@@ -84,7 +81,8 @@ async def generate_map(data: pd.DataFrame):
             color=colors.get(row["confidence"], "yellow"),
             fill=True,
             fill_opacity=0.7,
-            popup=f"{row['acq_date']} {row['acq_time']}",
+            popup=f"Date: {row['acq_date']}, Time: {row['acq_time']}"
+        f"<br>Lat: {row['latitude']}, Lon: {row['longitude']}"
         ).add_to(m)
 
     file_name = "firms_map.html"
